@@ -23,9 +23,6 @@ library(ggplot2)
 #Setting Working Directory
 setwd("~/StockProject")
 
-end.rcode-->
-
-<!--begin.rcode include=FALSE
 #Functions####
 ratings_function <- function(tickers, webscraper_function){
   
@@ -114,7 +111,7 @@ end.rcode-->
 <!--begin.rcode include=FALSE
 #Applying code####
 #List of tickers
-ticker <- read.csv("tickers.csv", stringsAsFactors=FALSE)
+ticker <- read.csv("~/StockProject/tickers.csv", sep="", stringsAsFactors = FALSE)
 
 #List of tickers
 ticker <- ticker$ticker
@@ -263,7 +260,7 @@ end.rcode-->
 <!--begin.rcode include=FALSE
 
 #Retrieving Stock Data From CSV (https://www.nasdaq.com/market-activity/stocks/screener)####
-all_stock_data <- read.csv("nasdaq_screener.csv", stringsAsFactors=FALSE)
+all_stock_data$Last <- read.csv("~/StockProject/nasdaq_screener.csv", stringsAsFactors = FALSE)
 
 #Changing stock prices to numeric
 all_stock_data$Last.Sale <- gsub(".*\\$","",all_stock_data$Last.Sale)
