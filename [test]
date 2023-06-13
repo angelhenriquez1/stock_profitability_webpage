@@ -1,0 +1,412 @@
+<html>
+
+<head>
+<title>Stock Data Website</title>
+</head>
+
+<body>
+
+<p>This is a stock forecast graphing website. Clicking the <b>Knit HTML</b> button will generate a webpage with stock profitability graphs.</p>
+
+<!--begin.rcode label=Libraries, include=FALSE 
+
+setwd("/Users/angelitohernandez/StockProject")
+
+#Package libraries
+library(tidyverse)
+library(utils)
+library(xml2)
+library(rvest)
+library(stringr)
+library(ggrepel)
+library(doSNOW)
+library(foreach)
+library(ggplot2)
+
+end.rcode-->
+
+<!--begin.rcode label=Functions, include=FALSE 
+
+ratings_function <- function(tickers, webscraper_function){
+  
+  stock_rating <- lapply(tickers, webscraper_function)
+  
+  rating_data <- rbind(tickers, stock_rating)
+  
+}
+
+stoch_table <- function(ticker){
+  
+  library(xml2)
+  library(rvest)
+  library(stringr)
+  
+  stoch_table <- tryCatch({
+    
+    stoch_table <- xml2::read_html(ticker) %>%
+      rvest::html_nodes("table") %>%
+      rvest::html_table() %>%
+      .[[2]]
+  },
+  error = function(e){NA}
+  )
+  
+  stoch_perc_d <- tryCatch({
+    
+    stoch_perc_d <- stoch_table[2,4] %>%
+      gsub("%", " ", .) %>%
+      stringr::str_trim() %>%
+      as.numeric()
+  },
+  error = function(e){NA}
+  
+  )
+  
+  stoch_perc_k <- tryCatch({
+    
+    stoch_perc_k <- stoch_table[2,3] %>%
+      gsub("%", " ", .) %>%
+      stringr::str_trim() %>%
+      as.numeric()
+  },
+  error = function(e){NA}
+  
+  )
+  
+  stoch_perc <- paste0(stoch_perc_d, " ", stoch_perc_k)
+  
+  return(stoch_perc)
+  
+}
+
+barchart_pattern_price_df <- function(barchart_pattern_data){
+  
+  #"ET" during the trading day; "/23" before- and after- hours
+  barchart_price_df <- str_split(barchart_pattern_data, "/23") %>%
+    as.data.frame()
+  
+  names(barchart_price_df)[1] ="price"
+  
+  barchart_price_df$price <- gsub("\\\n", " ", barchart_price_df$price) %>%
+    str_trim() %>%
+    sub("^\\D+", "", .) %>%
+    sub(" .*", "", .) %>%
+    as.numeric()
+  
+}
+
+barchart_pattern_ticker_df <- function(barchart_pattern_data){
+  
+  #"ET" during the trading day; "/23" before- and after- hours
+  barchart_pattern_df <- str_split(barchart_pattern_data, "/23") %>%
+    as.data.frame()
+  
+  names(barchart_pattern_df)[1] ="tickers"
+  
+  barchart_pattern_df$tickers <- gsub("\\\n", " ", barchart_pattern_df$tickers) %>%
+    str_trim() %>%
+    sub(" .*", "", .)
+  
+}
+
+end.rcode-->
+
+<!--begin.rcode label=Stochastics, include=FALSE 
+
+#List of tickers
+ticker <- read.csv("~/StockProject/tickers.csv", sep="", stringsAsFactors = FALSE)
+
+#List of tickers
+ticker <- ticker$ticker
+
+#Make list for cluster code (https://stackoverflow.com/questions/43262615/r-increase-my-rvest-scrapers-speed)
+URL <- paste0("https://www.barchart.com/stocks/quotes/", ticker, "/technical-analysis")
+
+URL <- as.data.frame(t(rbind(ticker, URL)))
+
+fourteen_day_stoch <- ratings_function(URL$URL, stoch_table)
+
+fourteen_day_stoch_df <- fourteen_day_stoch %>%
+  as.data.frame() %>%
+  t(.) %>%
+  .[,2] %>%
+  as.character() %>%
+  strsplit(.," ") %>%
+  as.data.frame() %>%
+  t(.)
+
+stock_data <- cbind(URL, fourteen_day_stoch_df)
+
+colnames(stock_data)[3] <- "stoch_perc_d"
+colnames(stock_data)[4] <- "stoch_perc_k"
+
+end.rcode-->
+
+<!--begin.rcode label="CoinCodex Profitability Data", include=FALSE 
+
+#Make list for cluster code (https://stackoverflow.com/questions/43262615/r-increase-my-rvest-scrapers-speed)
+barchart_tickers_list <- paste0("https://coincodex.com/stock/", stock_data$ticker, "/price-prediction/")
+
+#Stock Code using clusters
+cluster = makeCluster(2, type = "SOCK")
+
+registerDoSNOW(cluster)
+
+abstracts <- function(tickers_list){
+  library(rvest)
+  library(stringr)
+  
+  page <- tryCatch({
+    page <- rvest::session(tickers_list)
+  },
+  error = function(e){NA}
+  )
+  
+  abstracts <- tryCatch({
+    abstracts <- rvest::html_nodes(read_html(page), css=".data-predicted-price") %>% 
+      rvest::html_text()
+  },
+  error = function(e){NA}
+  )
+  
+  return(abstracts)
+  
+}
+
+#Round 1
+barchart_pattern_full_data <- unlist(foreach(i = 1:nrow(stock_data)) %dopar% abstracts(barchart_tickers_list[i]))
+
+price_predictions <- barchart_pattern_full_data %>%
+  gsub("\\(.*","", .) %>%
+  gsub(".*\\$","", .) %>%
+  stringr::str_trim(.) %>%
+  as.numeric(.)
+
+barchart_pattern_data <- cbind(stock_data, price_predictions)
+barchart_pattern_full_data <- as.data.frame(barchart_pattern_data)
+
+round_one_with_data <- subset(barchart_pattern_full_data, is.na(barchart_pattern_full_data$price_predictions) == FALSE)
+
+colnames(round_one_with_data)[1] <- "Symbol"
+
+round_one_without_data <- subset(barchart_pattern_full_data, is.na(barchart_pattern_full_data$price_predictions) == TRUE)
+round_one_without_data_df <- as.data.frame(round_one_without_data)
+
+#Round 2
+tickers_list <- paste0("https://coincodex.com/stock/", round_one_without_data_df$ticker, "/price-prediction/")
+
+barchart_pattern_full_data <- unlist(foreach(i = 1:nrow(round_one_without_data_df)) %dopar% abstracts(tickers_list[i]))
+
+barchart_pattern_full_data <- barchart_pattern_full_data %>%
+  gsub("\\(.*","",. ) %>%
+  gsub(".*\\$","",. ) %>%
+  stringr::str_trim() %>%
+  as.numeric()
+
+barchart_pattern_full_data <- cbind(round_one_without_data, barchart_pattern_full_data)
+barchart_pattern_full_data <- as.data.frame(barchart_pattern_full_data)
+
+round_two_with_data <- subset(barchart_pattern_full_data, is.na(barchart_pattern_full_data) == FALSE)
+
+colnames(round_two_with_data)[1] <- "Symbol"
+
+round_two_without_data <- subset(barchart_pattern_full_data, is.na(barchart_pattern_full_data) == TRUE)
+round_two_without_data_df <- as.data.frame(round_two_without_data)
+
+#Round 3
+tickers_list <- paste0("https://coincodex.com/stock/", round_two_without_data$ticker, "/price-prediction/")
+
+barchart_pattern_full_data <- unlist(foreach(i = 1:nrow(round_two_without_data_df)) %dopar% abstracts(tickers_list[i]))
+
+barchart_pattern_full_data <- barchart_pattern_full_data %>%
+  gsub("\\(.*","",. ) %>%
+  gsub(".*\\$","",. ) %>%
+  stringr::str_trim() %>%
+  as.numeric()
+
+barchart_pattern_full_data <- cbind(round_two_without_data, barchart_pattern_full_data)
+barchart_pattern_full_data <- as.data.frame(barchart_pattern_full_data)
+
+round_three_with_data <- subset(barchart_pattern_full_data, is.na(barchart_pattern_full_data) == FALSE)
+
+colnames(round_three_with_data)[1] <- "Symbol"
+
+round_three_without_data <- subset(barchart_pattern_full_data, is.na(barchart_pattern_full_data) == TRUE)
+round_three_without_data_df <- as.data.frame(round_three_without_data)
+
+#Round 4
+tickers_list <- paste0("https://coincodex.com/stock/", round_three_without_data$ticker, "/price-prediction/")
+
+barchart_pattern_full_data <- unlist(foreach(i = 1:nrow(round_three_without_data_df)) %dopar% abstracts(tickers_list[i]))
+
+barchart_pattern_full_data <- barchart_pattern_full_data %>%
+  gsub("\\(.*","",. ) %>%
+  gsub(".*\\$","",. ) %>%
+  stringr::str_trim() %>%
+  as.numeric()
+
+barchart_pattern_full_data <- cbind(round_three_without_data, barchart_pattern_full_data)
+barchart_pattern_full_data <- as.data.frame(barchart_pattern_full_data)
+
+round_four_with_data <- subset(barchart_pattern_full_data, is.na(barchart_pattern_full_data) == FALSE)
+
+colnames(round_four_with_data)[1] <- "Symbol"
+
+final_stock_rating_data <- round_one_with_data
+final_stock_rating_data <- rbind(final_stock_rating_data, round_two_with_data[1,4])
+final_stock_rating_data <- rbind(final_stock_rating_data, round_three_with_data[1,4])
+final_stock_rating_data <- rbind(final_stock_rating_data, round_four_with_data[1,4])
+
+end.rcode-->
+
+<!--begin.rcode label="General Stock Data", include=FALSE 
+#Retrieving Stock Data From CSV (https://www.nasdaq.com/market-activity/stocks/screener)
+all_stock_data <- read.csv("~/StockProject/nasdaq_screener.csv", stringsAsFactors=FALSE)
+
+#Changing stock prices to numeric
+all_stock_data$Last.Sale <- gsub(".*\\$","",all_stock_data$Last.Sale)
+all_stock_data$Last.Sale <- as.numeric(all_stock_data$Last.Sale)
+
+#Avoiding errors
+all_stock_data$Symbol <- gsub("/", "REMOVE", all_stock_data$Symbol)
+all_stock_data$Symbol <- gsub("[ ^]", "REMOVE", all_stock_data$Symbol)
+all_stock_data <- all_stock_data[-grep("REMOVE", all_stock_data$Symbol), ]
+
+all_data <- merge(final_stock_rating_data, all_stock_data, by.x = "Symbol", by.y = "Symbol")
+
+final_stock_rating_data <- all_data[,c(1,6:15,3:5)]
+
+final_stock_rating_data$price_predictions <- as.numeric(final_stock_rating_data$price_predictions)
+
+final_stock_rating_data$stock_rating_percent <- ((final_stock_rating_data$price_predictions - final_stock_rating_data$Last.Sale)/final_stock_rating_data$Last.Sale)*100
+
+final_stock_rating_data$stoch_perc_d <- as.numeric(final_stock_rating_data$stoch_perc_d)
+final_stock_rating_data$stoch_perc_k <- as.numeric(final_stock_rating_data$stoch_perc_k)
+
+end.rcode-->
+
+<!--begin.rcode label="Percent Profitability", include=FALSE 
+
+findoutlier <- function(x) {
+  return(x < quantile(x, .25) - 1.5*IQR(x) | x > quantile(x, .75) + 1.5*IQR(x))
+}
+
+percent_rating_subset <- subset(final_stock_rating_data, is.na(stock_rating_percent) == FALSE)
+
+percent_rating_data <- percent_rating_subset %>%
+  group_by(Sector) %>%
+  mutate(outlier = ifelse(findoutlier(stock_rating_percent), Symbol, NA))
+
+percent_rating_data_subset <- subset(percent_rating_data, percent_rating_data$stock_rating_percent > -75 & percent_rating_data$stock_rating_percent < 75)
+
+end.rcode-->
+
+<p>&nbsp;<b>Stock Rating Plot<b></p>
+
+<!--begin.rcode, label="All Stock Ratings Graph", echo=FALSE, fig.width=15, fig.height=7
+
+ggplot(percent_rating_data_subset, aes(x = Sector, y = stock_rating_percent, fill = Sector)) +
+  geom_boxplot() +
+  geom_label_repel(aes(label=Symbol), na.rm = TRUE) +
+  coord_flip() +
+  ylab("5 Day Predicted Percent Price Change (%)")
+
+end.rcode-->
+
+<!--begin.rcode label="Overbought/Oversold Subsets", include=FALSE
+
+percent_rating_data_overbought <- subset(percent_rating_data, stoch_perc_k > 80 & stoch_perc_d > 80)
+percent_rating_data_oversold <- subset(percent_rating_data, stoch_perc_k < 20 & stoch_perc_k < 20)
+
+end.rcode-->
+
+<p>&nbsp;<b>Oversold stock spread<b>:</p>
+
+<!--begin.rcode, label="Oversold (Bullish Graph)", echo=FALSE, fig.width=15, fig.height=7
+
+ggplot(percent_rating_data_oversold, aes(x = Sector, y = stock_rating_percent, fill = Sector)) +
+  geom_boxplot() +
+  geom_label_repel(aes(label=Symbol), na.rm = TRUE) +
+  coord_flip() +
+  ylab("Oversold 5 Day Predicted Percent Price Change (%)")
+
+end.rcode-->
+
+<p>&nbsp;<b>Most profitable oversold stock (go long)<b>:</p>
+
+<!--begin.rcode label="Oversold Percent Profitability", include=FALSE
+
+# Top N highest values by group
+most_profitable_oversold <- percent_rating_data_oversold %>%                                      
+  arrange(desc(stock_rating_percent)) %>% 
+  .[1:15,]
+
+most_profitable_oversold_df <- most_profitable_oversold[,c(1,15)]
+
+end.rcode-->
+
+<!--begin.rcode, label="Oversold Percent Profitability Graph", echo=FALSE, fig.width=15, fig.height=7
+
+ggplot(data = most_profitable_oversold_df, aes(x = reorder(Symbol, -stock_rating_percent), y = stock_rating_percent)) +
+  geom_bar(stat="identity", fill="limegreen") +
+  geom_text(aes(label=paste0(round(stock_rating_percent,2),"%")), vjust=1.6, color="black", size=4)+
+  theme_minimal() + 
+  labs(
+    title = "Top 15 1-Week Oversold Stock Profit Percentages",
+    x = "Stock Ticker",
+    y = "Profit Percent"
+  ) +
+  theme( # remove the vertical grid lines
+    panel.grid.major.x = element_blank() ,
+    # explicitly set the horizontal lines (or they will disappear too)
+    panel.grid.major.y = element_line(color="black", size = (.5)) 
+  )
+
+end.rcode-->
+
+<p>&nbsp;<b>Overbought stock spread<b>:</p>
+
+<!--begin.rcode, label="Overbought (Bearish Graph)", echo=FALSE, fig.width=15, fig.height=7
+
+ggplot(percent_rating_data_overbought, aes(x = Sector, y = stock_rating_percent, fill = Sector)) +
+  geom_boxplot() +
+  geom_label_repel(aes(label=Symbol), na.rm = TRUE) +
+  coord_flip() +
+  ylab("Overbought 5 Day Predicted Percent Price Change (%)")
+
+end.rcode-->
+
+<p>&nbsp;<b>Most profitable overbought stock (go short)<b>:</p>
+
+<!--begin.rcode, label="Overbought Percent Profitability", include=FALSE
+
+# Top N highest values by group
+most_profitable_overbought <- percent_rating_data_overbought %>%                                      
+  arrange(stock_rating_percent) %>% 
+  .[1:15,]
+
+most_profitable_overbought_df <- most_profitable_overbought[,c(1,15)]
+
+end.rcode-->
+
+<!--begin.rcode, label="Overbought Percent Profitability Graph", echo=FALSE, fig.width=15, fig.height=7
+
+ggplot(data = most_profitable_overbought_df, aes(x = reorder(Symbol, stock_rating_percent), y = stock_rating_percent)) +
+  geom_bar(stat="identity", fill="red") +
+  geom_text(aes(label=paste0(round(stock_rating_percent,2),"%")), vjust=-1.6, color="white", size=4)+
+  theme_minimal() + 
+  labs(
+    title = "Top 15 1-Week Overbought Stock Profit Percentages",
+    x = "Stock Ticker",
+    y = "Profit Percent"
+  ) +
+  theme( # remove the vertical grid lines
+    panel.grid.major.x = element_blank() ,
+    # explicitly set the horizontal lines (or they will disappear too)
+    panel.grid.major.y = element_line(color="white", size = (.5)) 
+  )
+
+end.rcode-->
+
+</body>
+</html>
