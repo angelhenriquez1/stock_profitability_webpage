@@ -10,7 +10,7 @@
 
 <!--begin.rcode include=FALSE
 
-setwd("/Users/angelitohernandez/StockProject")
+setwd("<Insert Working Directory>")
 
 #Package libraries####
 library(tidyverse)
