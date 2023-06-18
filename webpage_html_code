@@ -4,15 +4,88 @@
 <title>Stock Data Website</title>
 </head>
 
+<style>
+.column {
+  float: left;
+  width: 33%;
+  padding: 0px;
+}
+
+.half_column {
+  float: left;
+  width: 50%;
+  padding: 0px;
+}
+/* Add a black background color to the top navigation */
+.topnav {
+  background-color: #039baf;
+  overflow: hidden;
+}
+
+/* Style the links inside the navigation bar */
+.topnav a {
+  float: left;
+  color: #039baf;
+  text-align: center;
+  padding: 14px 16px;
+  text-decoration: none;
+  font-size: 17px;
+}
+
+/* Change the color of links on hover */
+.topnav a:hover {
+  background-color: #ddd;
+  color: black;
+}
+
+/* Add a color to the active/current link */
+.topnav a.active {
+  background-color: #04AA6D;
+  color: white;
+}
+
+.logo{ 
+	position:fixed; 
+	top:0; 
+	left:0; 
+} 
+
+</style>
+
 <body>
 
-<p>This is a stock forecast graphing website. Clicking the <b>Knit HTML</b> button will generate a webpage with stock profitability graphs.</p>
+<div class="topnav">
 
-<!--begin.rcode include=FALSE
 
-setwd("<Insert Working Directory>")
+</div>
 
-#Package libraries####
+<br>
+
+<p>This is a stock profitability forecast graphing website. Clicking the <b>Knit HTML</b> button will generate a webpage with stock profitability graphs.</p>
+
+<div class="row">
+
+<div class = "column">
+<p>&nbsp;<b>S&P 500</b></p>
+<iframe src="https://fred.stlouisfed.org/graph/graph-landing.php?g=16aOi&width=670&height=475" scrolling="no" frameborder="0" style="overflow:hidden; width:670px; height:525px;" allowTransparency="true" loading="lazy"></iframe></div>
+
+<div class = "column">
+<p>&nbsp;<b>Nasdaq</b></p>
+<iframe src="https://fred.stlouisfed.org/graph/graph-landing.php?g=16aPM&width=670&height=475" scrolling="no" frameborder="0" style="overflow:hidden; width:670px; height:525px;" allowTransparency="true" loading="lazy"></iframe></div>
+
+<div class = "column">
+<p>&nbsp;<b>Dow Jones</b></p>
+<iframe src="https://fred.stlouisfed.org/graph/graph-landing.php?g=16aPB&width=670&height=475" scrolling="no" frameborder="0" style="overflow:hidden; width:670px; height:525px;" allowTransparency="true" loading="lazy"></iframe>
+</div>
+
+</div>
+
+
+<!--begin.rcode label=Libraries, include=FALSE 
+
+setwd("/Users/angelitohernandez/StockProject")
+
+#Package libraries
 library(tidyverse)
 library(utils)
 library(xml2)
@@ -23,7 +96,10 @@ library(doSNOW)
 library(foreach)
 library(ggplot2)
 
-#Functions####
+end.rcode-->
+
+<!--begin.rcode label=Functions, include=FALSE 
+
 ratings_function <- function(tickers, webscraper_function){
   
   stock_rating <- lapply(tickers, webscraper_function)
@@ -106,7 +182,10 @@ barchart_pattern_ticker_df <- function(barchart_pattern_data){
   
 }
 
-#Applying code####
+end.rcode-->
+
+<!--begin.rcode label=Stochastics, include=FALSE 
+
 #List of tickers
 ticker <- read.csv("~/StockProject/tickers.csv", sep="", stringsAsFactors = FALSE)
 
@@ -134,7 +213,10 @@ stock_data <- cbind(URL, fourteen_day_stoch_df)
 colnames(stock_data)[3] <- "stoch_perc_d"
 colnames(stock_data)[4] <- "stoch_perc_k"
 
-#CoinCodex profitability data####
+end.rcode-->
+
+<!--begin.rcode label="CoinCodex Profitability Data", include=FALSE 
+
 #Make list for cluster code (https://stackoverflow.com/questions/43262615/r-increase-my-rvest-scrapers-speed)
 barchart_tickers_list <- paste0("https://coincodex.com/stock/", stock_data$ticker, "/price-prediction/")
 
@@ -248,8 +330,11 @@ final_stock_rating_data <- rbind(final_stock_rating_data, round_two_with_data[1,
 final_stock_rating_data <- rbind(final_stock_rating_data, round_three_with_data[1,4])
 final_stock_rating_data <- rbind(final_stock_rating_data, round_four_with_data[1,4])
 
-#Retrieving Stock Data From CSV (https://www.nasdaq.com/market-activity/stocks/screener)####
-all_stock_data <- read.csv("nasdaq_screener.csv", stringsAsFactors=FALSE)
+end.rcode-->
+
+<!--begin.rcode label="General Stock Data", include=FALSE 
+#Retrieving Stock Data From CSV (https://www.nasdaq.com/market-activity/stocks/screener)
+all_stock_data <- read.csv("~/StockProject/nasdaq_screener.csv", stringsAsFactors=FALSE)
 
 #Changing stock prices to numeric
 all_stock_data$Last.Sale <- gsub(".*\\$","",all_stock_data$Last.Sale)
@@ -271,7 +356,10 @@ final_stock_rating_data$stock_rating_percent <- ((final_stock_rating_data$price_
 final_stock_rating_data$stoch_perc_d <- as.numeric(final_stock_rating_data$stoch_perc_d)
 final_stock_rating_data$stoch_perc_k <- as.numeric(final_stock_rating_data$stoch_perc_k)
 
-#Preparing Graphs####
+end.rcode-->
+
+<!--begin.rcode label="Percent Profitability", include=FALSE 
+
 findoutlier <- function(x) {
   return(x < quantile(x, .25) - 1.5*IQR(x) | x > quantile(x, .75) + 1.5*IQR(x))
 }
@@ -286,9 +374,9 @@ percent_rating_data_subset <- subset(percent_rating_data, percent_rating_data$st
 
 end.rcode-->
 
-<p>&nbsp;<b>Stock Rating Plot<b></p>
+<p>&nbsp;<b>Stock Rating Plot</b></p>
 
-<!--begin.rcode, echo=FALSE, fig.width=15, fig.height=7
+<!--begin.rcode, label="All Stock Ratings Graph", echo=FALSE, fig.width=15, fig.height=7, warning=FALSE
 
 ggplot(percent_rating_data_subset, aes(x = Sector, y = stock_rating_percent, fill = Sector)) +
   geom_boxplot() +
@@ -298,18 +386,18 @@ ggplot(percent_rating_data_subset, aes(x = Sector, y = stock_rating_percent, fil
 
 end.rcode-->
 
-<!--begin.rcode include=FALSE
+<!--begin.rcode label="Overbought/Oversold Subsets", include=FALSE
 
 percent_rating_data_overbought <- subset(percent_rating_data, stoch_perc_k > 80 & stoch_perc_d > 80)
 percent_rating_data_oversold <- subset(percent_rating_data, stoch_perc_k < 20 & stoch_perc_k < 20)
 
 end.rcode-->
 
-<p>&nbsp;<b>Oversold stock spread<b>:</p>
+<div class= half_column>
+<p>&nbsp;<b>Oversold stock spread</b></p>
 
-<!--begin.rcode, echo=FALSE, fig.width=15, fig.height=7
+<!--begin.rcode, label="Oversold (Bullish Graph)", echo=FALSE, fig.width=15, fig.height=7, warning=FALSE
 
-#Oversold, bullish graphs####
 ggplot(percent_rating_data_oversold, aes(x = Sector, y = stock_rating_percent, fill = Sector)) +
   geom_boxplot() +
   geom_label_repel(aes(label=Symbol), na.rm = TRUE) +
@@ -318,9 +406,7 @@ ggplot(percent_rating_data_oversold, aes(x = Sector, y = stock_rating_percent, f
 
 end.rcode-->
 
-<p>&nbsp;<b>Most profitable oversold stock (go long)<b>:</p>
-
-<!--begin.rcode echo=FALSE, fig.width=15, fig.height=7
+<!--begin.rcode label="Oversold Percent Profitability", include=FALSE
 
 # Top N highest values by group
 most_profitable_oversold <- percent_rating_data_oversold %>%                                      
@@ -328,6 +414,12 @@ most_profitable_oversold <- percent_rating_data_oversold %>%
   .[1:15,]
 
 most_profitable_oversold_df <- most_profitable_oversold[,c(1,15)]
+
+end.rcode-->
+
+<p>&nbsp;<b>Most profitable oversold stock (go long)</b></p>
+
+<!--begin.rcode, label="Oversold Percent Profitability Graph", echo=FALSE, fig.width=15, fig.height=7, warning=FALSE
 
 ggplot(data = most_profitable_oversold_df, aes(x = reorder(Symbol, -stock_rating_percent), y = stock_rating_percent)) +
   geom_bar(stat="identity", fill="limegreen") +
@@ -344,12 +436,14 @@ ggplot(data = most_profitable_oversold_df, aes(x = reorder(Symbol, -stock_rating
     panel.grid.major.y = element_line(color="black", size = (.5)) 
   )
 
-
 end.rcode-->
+</div>
 
-<p>&nbsp;<b>Overbought stock spread<b>:</p>
+<div class= half_column>
 
-<!--begin.rcode, echo=FALSE, fig.width=15, fig.height=7
+<p>&nbsp;<b>Overbought stock spread</b></p>
+
+<!--begin.rcode, label="Overbought (Bearish Graph)", echo=FALSE, fig.width=15, fig.height=7, warning=FALSE
 
 ggplot(percent_rating_data_overbought, aes(x = Sector, y = stock_rating_percent, fill = Sector)) +
   geom_boxplot() +
@@ -359,9 +453,7 @@ ggplot(percent_rating_data_overbought, aes(x = Sector, y = stock_rating_percent,
 
 end.rcode-->
 
-<p>&nbsp;<b>Most profitable overbought stock (go short)<b>:</p>
-
-<!--begin.rcode echo=FALSE, fig.width=15, fig.height=7
+<!--begin.rcode, label="Overbought Percent Profitability", include=FALSE
 
 # Top N highest values by group
 most_profitable_overbought <- percent_rating_data_overbought %>%                                      
@@ -369,6 +461,12 @@ most_profitable_overbought <- percent_rating_data_overbought %>%
   .[1:15,]
 
 most_profitable_overbought_df <- most_profitable_overbought[,c(1,15)]
+
+end.rcode-->
+
+<p>&nbsp;<b>Most profitable overbought stock (go short)</b></p>
+
+<!--begin.rcode, label="Overbought Percent Profitability Graph", echo=FALSE, fig.width=15, fig.height=7, warning=FALSE
 
 ggplot(data = most_profitable_overbought_df, aes(x = reorder(Symbol, stock_rating_percent), y = stock_rating_percent)) +
   geom_bar(stat="identity", fill="red") +
@@ -386,6 +484,16 @@ ggplot(data = most_profitable_overbought_df, aes(x = reorder(Symbol, stock_ratin
   )
 
 end.rcode-->
+</div>
+
+<p>&nbsp;<b>References:</b></p>
+<p>● S&P Dow Jones Indices LLC, S&P 500 [SP500], retrieved from FRED, Federal Reserve Bank of St. Louis; https://fred.stlouisfed.org/series/SP500, June 15, 2023.</p>
+<p>● NASDAQ OMX Group, NASDAQ Composite Index [NASDAQCOM], retrieved from FRED, Federal Reserve Bank of St. Louis; https://fred.stlouisfed.org/series/NASDAQCOM, June 15, 2023.</p>
+<p>● S&P Dow Jones Indices LLC, Dow Jones Industrial Average [DJIA], retrieved from FRED, Federal Reserve Bank of St. Louis; https://fred.stlouisfed.org/series/DJIA, June 15, 2023.</p>
+<p>● “Crypto Prices, Charts and Cryptocurrency Market Cap.” CoinCodex, coincodex.com/. Accessed June 15, 2023</p> 
+<!--begin.rcode include=FALSE
+print(Sys.Date())
+end.rcode--></p>
 
 </body>
 </html>
