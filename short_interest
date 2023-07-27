@@ -1,0 +1,87 @@
+#Package libraries####
+library(tidyverse)
+library(utils)
+library(xml2)
+library(rvest)
+library(stringr)
+library(ggrepel)
+library(doSNOW)
+library(foreach)
+library(ggplot2)
+
+#Setting Working Directory
+setwd("~/StockProject")
+
+#List of tickers
+ticker <- read.csv("tickers.csv", stringsAsFactors=FALSE)
+
+#List of tickers
+ticker <- ticker$x
+
+#Make list for cluster code (https://stackoverflow.com/questions/43262615/r-increase-my-rvest-scrapers-speed)
+URL <- paste0("https://www.benzinga.com/quote/", ticker, "/short-interest")
+
+ticker <- as.data.frame(ticker)
+
+#Stock Code using clusters
+cluster = makeCluster(2, type = "SOCK")
+
+registerDoSNOW(cluster)
+
+page <- rvest::session("https://www.benzinga.com/quote/ZS/short-interest")
+
+abstracts <- function(tickers_list){
+  library(rvest)
+  library(stringr)
+  
+  page <- tryCatch({
+    page <- rvest::session(tickers_list)
+  },
+  error = function(e){NA}
+  )
+  
+  abstracts <- tryCatch({
+    abstracts <- rvest::html_nodes(read_html(page), css="div.value.text-lg.font-bold.truncate-2-lines") %>% 
+      rvest::html_text() %>%
+      .[2] %>%
+      gsub("%", "",.) %>%
+      as.numeric(.)
+  },
+  error = function(e){NA}
+  )
+  
+  return(abstracts)
+  
+}
+
+#Round 1
+benzinga_short_interest <- unlist(foreach(i = 1:nrow(ticker)) %dopar% abstracts(URL[i]))
+
+benzinga_short_interest_data <- cbind(ticker, benzinga_short_interest)
+benzinga_short_interest_full_data <- as.data.frame(benzinga_short_interest_data)
+
+#Top Short Interest
+# Top N highest values
+top_short_interest <- benzinga_short_interest_full_data %>%                                      
+  arrange(desc(benzinga_short_interest)) %>% 
+  .[1:30,] %>%
+  as.data.frame()
+
+top_short_interest_plot <- ggplot(data = top_short_interest, aes(x = reorder(ticker, -benzinga_short_interest), y = benzinga_short_interest)) +
+  geom_bar(stat="identity", fill="green3") +
+  geom_text(aes(label=paste0(round(benzinga_short_interest,2),"%")), vjust=3.5, color="white", size=3.5) +
+  geom_text(aes(label=ticker), vjust=1.6, color="black", size=3.5) +
+  theme_minimal() + 
+  labs(
+    title = "Top 30 Short Interest",
+    x = "Stock Ticker",
+    y = "Short Interest Percent"
+  ) +
+  theme( # remove the vertical grid lines
+    panel.grid.major.x = element_blank() ,
+    # explicitly set the horizontal lines (or they will disappear too)
+    panel.grid.major.y = element_line(color="white") 
+  )
+
+top_short_interest_plot
+
