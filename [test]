@@ -1,16 +1,3 @@
-<html>
-
-<head>
-<title>Stock Data Website</title>
-</head>
-
-<body>
-
-<p>This is a stock forecast graphing website. Clicking the <b>Knit HTML</b> button will generate a webpage with stock profitability graphs.</p>
-
-<!--begin.rcode label=Libraries, include=FALSE 
-
-setwd("/Users/angelitohernandez/StockProject")
 
 #Package libraries
 library(tidyverse)
@@ -22,10 +9,9 @@ library(ggrepel)
 library(doSNOW)
 library(foreach)
 library(ggplot2)
+library(knitr)
+library(kableExtra)
 
-end.rcode-->
-
-<!--begin.rcode label=Functions, include=FALSE 
 
 ratings_function <- function(tickers, webscraper_function){
   
@@ -109,15 +95,10 @@ barchart_pattern_ticker_df <- function(barchart_pattern_data){
   
 }
 
-end.rcode-->
-
-<!--begin.rcode label=Stochastics, include=FALSE 
-
 #List of tickers
-ticker <- read.csv("~/StockProject/tickers.csv", sep="", stringsAsFactors = FALSE)
+ticker <- read.csv("~/StockProject/tickers.csv", sep="")
 
-#List of tickers
-ticker <- ticker$ticker
+ticker <- gsub( ".*,", "", ticker[,1])
 
 #Make list for cluster code (https://stackoverflow.com/questions/43262615/r-increase-my-rvest-scrapers-speed)
 URL <- paste0("https://www.barchart.com/stocks/quotes/", ticker, "/technical-analysis")
@@ -139,10 +120,6 @@ stock_data <- cbind(URL, fourteen_day_stoch_df)
 
 colnames(stock_data)[3] <- "stoch_perc_d"
 colnames(stock_data)[4] <- "stoch_perc_k"
-
-end.rcode-->
-
-<!--begin.rcode label="CoinCodex Profitability Data", include=FALSE 
 
 #Make list for cluster code (https://stackoverflow.com/questions/43262615/r-increase-my-rvest-scrapers-speed)
 barchart_tickers_list <- paste0("https://coincodex.com/stock/", stock_data$ticker, "/price-prediction/")
@@ -203,6 +180,7 @@ barchart_pattern_full_data <- barchart_pattern_full_data %>%
   stringr::str_trim() %>%
   as.numeric()
 
+
 barchart_pattern_full_data <- cbind(round_one_without_data, barchart_pattern_full_data)
 barchart_pattern_full_data <- as.data.frame(barchart_pattern_full_data)
 
@@ -257,9 +235,6 @@ final_stock_rating_data <- rbind(final_stock_rating_data, round_two_with_data[1,
 final_stock_rating_data <- rbind(final_stock_rating_data, round_three_with_data[1,4])
 final_stock_rating_data <- rbind(final_stock_rating_data, round_four_with_data[1,4])
 
-end.rcode-->
-
-<!--begin.rcode label="General Stock Data", include=FALSE 
 #Retrieving Stock Data From CSV (https://www.nasdaq.com/market-activity/stocks/screener)
 all_stock_data <- read.csv("~/StockProject/nasdaq_screener.csv", stringsAsFactors=FALSE)
 
@@ -272,7 +247,7 @@ all_stock_data$Symbol <- gsub("/", "REMOVE", all_stock_data$Symbol)
 all_stock_data$Symbol <- gsub("[ ^]", "REMOVE", all_stock_data$Symbol)
 all_stock_data <- all_stock_data[-grep("REMOVE", all_stock_data$Symbol), ]
 
-all_data <- merge(final_stock_rating_data, all_stock_data, by.x = "Symbol", by.y = "Symbol")
+all_data <- merge(final_stock_rating_data, all_stock_data, by = "Symbol")
 
 final_stock_rating_data <- all_data[,c(1,6:15,3:5)]
 
@@ -282,10 +257,6 @@ final_stock_rating_data$stock_rating_percent <- ((final_stock_rating_data$price_
 
 final_stock_rating_data$stoch_perc_d <- as.numeric(final_stock_rating_data$stoch_perc_d)
 final_stock_rating_data$stoch_perc_k <- as.numeric(final_stock_rating_data$stoch_perc_k)
-
-end.rcode-->
-
-<!--begin.rcode label="Percent Profitability", include=FALSE 
 
 findoutlier <- function(x) {
   return(x < quantile(x, .25) - 1.5*IQR(x) | x > quantile(x, .75) + 1.5*IQR(x))
@@ -299,42 +270,20 @@ percent_rating_data <- percent_rating_subset %>%
 
 percent_rating_data_subset <- subset(percent_rating_data, percent_rating_data$stock_rating_percent > -75 & percent_rating_data$stock_rating_percent < 75)
 
-end.rcode-->
-
-<p>&nbsp;<b>Stock Rating Plot<b></p>
-
-<!--begin.rcode, label="All Stock Ratings Graph", echo=FALSE, fig.width=15, fig.height=7
-
 ggplot(percent_rating_data_subset, aes(x = Sector, y = stock_rating_percent, fill = Sector)) +
   geom_boxplot() +
   geom_label_repel(aes(label=Symbol), na.rm = TRUE) +
   coord_flip() +
   ylab("5 Day Predicted Percent Price Change (%)")
 
-end.rcode-->
-
-<!--begin.rcode label="Overbought/Oversold Subsets", include=FALSE
-
 percent_rating_data_overbought <- subset(percent_rating_data, stoch_perc_k > 80 & stoch_perc_d > 80)
 percent_rating_data_oversold <- subset(percent_rating_data, stoch_perc_k < 20 & stoch_perc_k < 20)
-
-end.rcode-->
-
-<p>&nbsp;<b>Oversold stock spread<b>:</p>
-
-<!--begin.rcode, label="Oversold (Bullish Graph)", echo=FALSE, fig.width=15, fig.height=7
 
 ggplot(percent_rating_data_oversold, aes(x = Sector, y = stock_rating_percent, fill = Sector)) +
   geom_boxplot() +
   geom_label_repel(aes(label=Symbol), na.rm = TRUE) +
   coord_flip() +
   ylab("Oversold 5 Day Predicted Percent Price Change (%)")
-
-end.rcode-->
-
-<p>&nbsp;<b>Most profitable oversold stock (go long)<b>:</p>
-
-<!--begin.rcode label="Oversold Percent Profitability", include=FALSE
 
 # Top N highest values by group
 most_profitable_oversold <- percent_rating_data_oversold %>%                                      
@@ -343,14 +292,9 @@ most_profitable_oversold <- percent_rating_data_oversold %>%
 
 most_profitable_oversold_df <- most_profitable_oversold[,c(1,15)]
 
-end.rcode-->
-
-<!--begin.rcode, label="Oversold Percent Profitability Graph", echo=FALSE, fig.width=15, fig.height=7
-
 ggplot(data = most_profitable_oversold_df, aes(x = reorder(Symbol, -stock_rating_percent), y = stock_rating_percent)) +
   geom_bar(stat="identity", fill="limegreen") +
-  geom_text(aes(label=paste0(round(stock_rating_percent,2),"%")), vjust=1.6, color="black", size=4)+
-  theme_minimal() + 
+  geom_text(aes(label=paste0(round(stock_rating_percent,2),"%")), vjust=1.6, color="black", size=4) +
   labs(
     title = "Top 15 1-Week Oversold Stock Profit Percentages",
     x = "Stock Ticker",
@@ -362,11 +306,27 @@ ggplot(data = most_profitable_oversold_df, aes(x = reorder(Symbol, -stock_rating
     panel.grid.major.y = element_line(color="black", size = (.5)) 
   )
 
-end.rcode-->
+# Generate the URLs
+most_profitable_oversold_URL <- paste0("https://coincodex.com/stock/", most_profitable_oversold_df$Symbol, "/price-prediction/")
 
-<p>&nbsp;<b>Overbought stock spread<b>:</p>
+# Combine the URLs and symbol names into a data frame
+url_table <- data.frame(Symbol = most_profitable_oversold_df$Symbol, 
+                        URL = most_profitable_oversold_URL,
+                        LastPrice = most_profitable_oversold$Last.Sale,
+                        Sector = most_profitable_oversold$Sector,
+                        Industry = most_profitable_oversold$Industry,
+                        Stochastics_perc_D = most_profitable_oversold$stoch_perc_d,
+                        Stochastics_perc_K = most_profitable_oversold$stoch_perc_k,
+                        PricePrediction = most_profitable_oversold$price_predictions,
+                        PercentProfit = most_profitable_oversold$stock_rating_percent
+)
 
-<!--begin.rcode, label="Overbought (Bearish Graph)", echo=FALSE, fig.width=15, fig.height=7
+# Use kable to create an HTML table with clickable links
+url_oversold_table_html <- kable(url_table, format = "simple", escape = FALSE, col.names = c("Symbol", "URL", "LastPrice", "Sector", "Industry", "Stochastics_perc_D", "Stochastics_perc_K", "PricePrediction", "PercentProfit")) %>%
+  kable_styling(full_width = FALSE)
+
+# Print the HTML table
+cat(url_oversold_table_html)
 
 ggplot(percent_rating_data_overbought, aes(x = Sector, y = stock_rating_percent, fill = Sector)) +
   geom_boxplot() +
@@ -374,27 +334,16 @@ ggplot(percent_rating_data_overbought, aes(x = Sector, y = stock_rating_percent,
   coord_flip() +
   ylab("Overbought 5 Day Predicted Percent Price Change (%)")
 
-end.rcode-->
-
-<p>&nbsp;<b>Most profitable overbought stock (go short)<b>:</p>
-
-<!--begin.rcode, label="Overbought Percent Profitability", include=FALSE
-
 # Top N highest values by group
-most_profitable_overbought <- percent_rating_data_overbought %>%                                      
+most_profitable_overbought <- percent_rating_data_overbought %>%                                
   arrange(stock_rating_percent) %>% 
   .[1:15,]
 
 most_profitable_overbought_df <- most_profitable_overbought[,c(1,15)]
 
-end.rcode-->
-
-<!--begin.rcode, label="Overbought Percent Profitability Graph", echo=FALSE, fig.width=15, fig.height=7
-
 ggplot(data = most_profitable_overbought_df, aes(x = reorder(Symbol, stock_rating_percent), y = stock_rating_percent)) +
   geom_bar(stat="identity", fill="red") +
   geom_text(aes(label=paste0(round(stock_rating_percent,2),"%")), vjust=-1.6, color="white", size=4)+
-  theme_minimal() + 
   labs(
     title = "Top 15 1-Week Overbought Stock Profit Percentages",
     x = "Stock Ticker",
@@ -403,10 +352,80 @@ ggplot(data = most_profitable_overbought_df, aes(x = reorder(Symbol, stock_ratin
   theme( # remove the vertical grid lines
     panel.grid.major.x = element_blank() ,
     # explicitly set the horizontal lines (or they will disappear too)
-    panel.grid.major.y = element_line(color="white", size = (.5)) 
+    panel.grid.major.y = element_line(color="black", size = (.5)) 
   )
 
-end.rcode-->
+# Generate the URLs
+most_profitable_overbought_URL <- paste0("https://coincodex.com/stock/", most_profitable_overbought_df$Symbol, "/price-prediction/")
 
-</body>
-</html>
+# Combine the URLs and symbol names into a data frame
+url_table_2 <- data.frame(Symbol = most_profitable_overbought_df$Symbol, 
+                          URL = most_profitable_overbought_URL,
+                          LastPrice = most_profitable_overbought$Last.Sale,
+                          Sector = most_profitable_overbought$Sector,
+                          Industry = most_profitable_overbought$Industry,
+                          Stochastics_perc_D = most_profitable_overbought$stoch_perc_d,
+                          Stochastics_perc_K = most_profitable_overbought$stoch_perc_k,
+                          PricePrediction = most_profitable_overbought$price_predictions,
+                          PercentProfit = most_profitable_overbought$stock_rating_percent
+)
+
+# Use kable to create an HTML table with clickable links
+url_overbought_table_html <- kable(url_table_2, format = "simple", escape = FALSE, col.names = c("Symbol", "URL", "LastPrice", "Sector", "Industry", "Stochastics_perc_D", "Stochastics_perc_K", "PricePrediction", "PercentProfit")) %>%
+  kable_styling(full_width = FALSE)
+
+# Print the HTML table
+cat(url_overbought_table_html)
+
+most_profitable_percentage <- percent_rating_data %>%                                      
+  arrange(desc(stock_rating_percent)) %>% 
+  .[1:15,]
+
+most_profitable_percentage_df <- most_profitable_percentage[,c(1,15)]
+
+
+ggplot(data = most_profitable_percentage_df, aes(x = reorder(Symbol, -stock_rating_percent), y = stock_rating_percent)) +
+  geom_bar(stat="identity", fill="limegreen") +
+  geom_text(aes(label=paste0(round(stock_rating_percent,2),"%")), vjust=1.6, color="black", size=4)+
+  theme_minimal() + 
+  labs(
+    title = "Top 15 1-Week Stock Profit Percentages",
+    x = "Stock Ticker",
+    y = "Profit Percent"
+  ) +
+  theme( # remove the vertical grid lines
+    panel.grid.major.x = element_blank() ,
+    # explicitly set the horizontal lines (or they will disappear too)
+    panel.grid.major.y = element_line(color="black", size = (.5)) 
+  )
+
+least_profitable_percentage <- percent_rating_data %>%                                      
+  arrange(stock_rating_percent) %>% 
+  .[1:15,]
+
+least_profitable_percentage_df <- least_profitable_percentage[,c(1,15)]
+
+ggplot(data = least_profitable_percentage_df, aes(x = reorder(Symbol, stock_rating_percent), y = stock_rating_percent)) +
+  geom_bar(stat="identity", fill="red") +
+  geom_text(aes(label=paste0(round(stock_rating_percent,2),"%")), vjust=-1.6, color="white", size=4)+
+  theme_minimal() + 
+  labs(
+    title = "Top 15 Stock Profit Percentages",
+    x = "Stock Ticker",
+    y = "Profit Percent"
+  ) +
+  theme( # remove the vertical grid lines
+    panel.grid.major.x = element_blank() ,
+    # explicitly set the horizontal lines (or they will disappear too)
+    panel.grid.major.y = element_line(color="black", size = (.5)) 
+  )
+
+cat("References:", "\n")
+
+cat(paste0("● S&P Dow Jones Indices LLC, S&P 500 [SP500], retrieved from FRED, Federal Reserve Bank of St. Louis; https://fred.stlouisfed.org/series/SP500, ", Sys.Date(), ". "), "\n")
+
+cat(paste0("● NASDAQ OMX Group, NASDAQ Composite Index [NASDAQCOM], retrieved from FRED, Federal Reserve Bank of St. Louis; https://fred.stlouisfed.org/series/NASDAQCOM, ", Sys.Date(), ". "), "\n")
+
+cat(paste0("● S&P Dow Jones Indices LLC, Dow Jones Industrial Average [DJIA], retrieved from FRED, Federal Reserve Bank of St. Louis; https://fred.stlouisfed.org/series/DJIA, ", Sys.Date(), ". "), "\n")
+
+cat(paste0("● “Crypto Prices, Charts and Cryptocurrency Market Cap.” CoinCodex, coincodex.com/. Accessed ", Sys.Date(), " "), "\n")
